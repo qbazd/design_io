@@ -1,0 +1,14 @@
+.dub
+docs.json
+__dummy.html
+docs/
+design_io_lib.so
+design_io_lib.dylib
+design_io_lib.dll
+design_io_lib.a
+design_io_lib.lib
+design_io_lib-test-*
+*.exe
+*.o
+*.obj
+*.lst
