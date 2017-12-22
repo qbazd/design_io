@@ -16,10 +16,14 @@ import std.math;
 
 class DataFrame {
   enum readItemMode {None, Timestep, NumberOfElements, Bbox, Elements} ;
+  enum frameDataContent {None, DiskProps, Other};
   enum frameType {None, Atoms, Entries};
   string name ;
   ulong timestep = -1;
+  
   frameType item_type = frameType.None;
+  frameDataContent frame_content = frameDataContent.None;
+
   int elements_count = 0;
   string [] elements_header;
   float [][] elements;
@@ -128,6 +132,12 @@ class DataFrame {
           auto c2 = matchFirst(line, ctRegex!(`^ITEM: (ATOMS|ENTRIES)\s+(.*)\s+$`));
           if (!c2.empty){
             elements_header = c2[2].to!string.split(" ") ;//.map!(to!string);
+            if (countUntil(elements_header, "id") > -1){
+              frame_content = frameDataContent.DiskProps; 
+            } else {
+              frame_content = frameDataContent.Other; 
+            }
+
             //mode = readItemMode.Elements; idx = 0;
             return;
           }
@@ -236,7 +246,7 @@ class DataSet {
 
   DataFrame[][int] frames;
   string [] features;
-
+  int [] timesteps;
   //path_prefix = "/path/to/data/run1aa.[0]"
 
   this(string path_prefix){
@@ -245,7 +255,9 @@ class DataSet {
   }
 
   void readListing(){
-    writeln(dirName(path_prefix));
+
+    //writeln(dirName(path_prefix));
+
     // test for const
     if (!(path_prefix ~ ".0").isFile){
       //raise io error
@@ -275,7 +287,7 @@ class DataSet {
     //writeln(features);
     //writeln(dirEntries(dirName(path_prefix),  SpanMode.shallow));
 
-    int [] timesteps;
+    timesteps = [];
     foreach (string name; dirEntries(dirName(path_prefix),"*.mean",  SpanMode.shallow) )
     {
       auto c2 = matchFirst(name, ctRegex!(`\.(\d+)\.mean$`));
@@ -301,7 +313,7 @@ class DataSet {
   }
 
   int [] getTimeSteps(){
-    return frames.keys();
+    return timesteps;
   }
 
   string [] getFeaturesList(){
@@ -388,29 +400,50 @@ float scale2Bbox(float v, float [2] ext){
   return ext[0] + (v* (ext[1] - ext[0]));
 }
 
-class DataSetVisualizator{
+// DiskVisualisator
 
+class DiskVisualizator{
+
+  // colorVis (scalar, vector_magnitude)
+
+  static int len_ar = 4;
+
+  bool posScaled = false;
   DataSet ds;
-  int [] timeSteps;
-
-  float [] radius;
+  float [int] radius;
   float [][int] cachedFloatFrames;
 
   this(DataSet ds){
     this.ds = ds;
-    timeSteps = ds.frames.keys.sort.array();
+    string [] features = ds.getFeaturesList();
+
+    if (countUntil(features, ".xs") > 0 && countUntil(features, ".ys") > 0){
+      posScaled = true;
+    } else if (countUntil(features, ".x") > 0 && countUntil(features, ".y") > 0){
+      posScaled = false;
+    } else {
+      //raise no XY !
+      writeln("raise no .x,.y or .xs,.ys!");
+    }
+
     getRadius();
   }
+
 
   void getRadius(){
     auto f = ds.getFrame(0,"const");
     f.read_data();
     //writeln(f.elements_count, " id: ", ds.getFrame(0,"const").elements[0][0]);
-    radius = ds.getFrame(0,"const").getColumn("radius");
+    foreach(e; ds.const_frame.elements){
+      radius[cast(int) e[0]] = e[1];
+    }
+
     f.clear_data();
   }
 
+
   float [] getFrame(int ts){
+
     {
       auto dc = cachedFloatFrames.get(ts, []);
       if (!dc.empty) return dc;
@@ -419,22 +452,46 @@ class DataSetVisualizator{
     auto f = ds.getFrame(ts,"");
     f.read_data();
 
+    auto ids = f.getColumn("id");
+
     //writeln(f.bbox);
     //writeln(ts, " - " , f.elements_count, " id: " , f.elements[0][0]);  
-    auto xs = f.getColumn("xs");
-    auto ys = f.getColumn("ys");
+    float [] x,y,color;
+  
+    if (posScaled){
+      x.length = radius.length;
+      y.length = radius.length;
 
-    auto fx = f.getColumn("fx");
-    auto fy = f.getColumn("fy");
+      auto xs = f.getColumn("xs");
+      auto ys = f.getColumn("ys");
+
+      foreach (i; 0..radius.length) {   
+        x[i] = scale2Bbox(xs[i], f.bbox[0]);
+        y[i] = scale2Bbox(ys[i], f.bbox[1]);
+      }
+    } else {
+      x = f.getColumn("x");
+      y = f.getColumn("y");
+    }
+    // scalar to color
+
+
+    // vector mag to color
+    {
+      color.length = radius.length;
+      auto a = f.getColumn("fx");
+      auto b = f.getColumn("fy");
     //auto omegaz = f.getColumn("omegaz");
+      foreach (i; 0..radius.length) {   
+        color[i] = sqrt( (a[i] * a[i]) + (b[i] * b[i]) );
+      }
+    }
 
     float[] data;
-    static int len_ar = 4;
     data.length = radius.length * len_ar;
 
     foreach (i; 0..radius.length) {
-      auto color = sqrt( (fx[i] * fx[i]) + (fy[i] * fy[i]) );
-      data[i*len_ar..((i+1) * len_ar)] = [scale2Bbox(xs[i], f.bbox[0]), scale2Bbox(ys[i], f.bbox[1]), radius[i], color];
+      data[i*len_ar..((i+1) * len_ar)] = [x[i], y[i], radius[cast(int)ids[i]], color[i]];
     }
 
     f.clear_data();

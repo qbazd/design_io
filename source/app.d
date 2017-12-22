@@ -6,7 +6,6 @@ import design.IO;
 import std.algorithm;
 import std.math;
 
-
 void main()
 {
     //auto df = new DataFrame("../shearbreak.res/run1aa.0");
@@ -27,7 +26,7 @@ void main()
     writeln(ds.getFeatureIdx("bonds.c_4d[5]"));
 
 
-    auto dsv = new DataSetVisualizator(ds);
+    auto dsv = new DiskVisualizator(ds);
 
     float x;
 
@@ -35,8 +34,8 @@ void main()
       writeln(i);
       string name = strip(stdin.readln());
 
-      foreach(ts; dsv.timeSteps ){
-        auto f = dsv.getFrame(ts);
+      foreach(ts; dsv.ds.timesteps ){
+        auto f = dsv.getFrame(ts); //-> OpenGl
         x = f[0];
         //writeln(dsv.getFrame(ts));
       }
