@@ -227,7 +227,7 @@ class DataFrame {
   }
 
   bool is_cache_valid(){ 
-    if (!cache_file_name().isFile) return false; 
+    if (!cache_file_name().exists || !cache_file_name().isFile) return false; 
 
     if (timeLastModified(cache_file_name) >= timeLastModified(filepath, SysTime.min)){
       return true;
